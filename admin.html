@@ -1,0 +1,349 @@
+<script>
+const tokenCheck = prompt("Enter admin token:");
+if (tokenCheck) {
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById('adminToken').value = tokenCheck;
+  });
+} else {
+  alert("No token. Admin disabled.");
+}
+</script><!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SVS Booking – Admin</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #f5f7ff;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .card {
+      background: #141a33;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    label { display: inline-block; margin-bottom: 6px; }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #3a4065;
+      background: #0b1020;
+      color: #f5f7ff;
+      box-sizing: border-box;
+    }
+    textarea { resize: vertical; min-height: 48px; }
+    button {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      margin-right: 6px;
+      margin-top: 4px;
+    }
+    button.primary {
+      background: #2f7bff;
+      color: white;
+    }
+    button.secondary {
+      background: #394066;
+      color: #f5f7ff;
+    }
+    button.danger {
+      background: #d13c4b;
+      color: white;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    th, td {
+      border-bottom: 1px solid #303654;
+      padding: 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      font-weight: 600;
+      background: #1d2442;
+    }
+    .checkbox-cell {
+      text-align: center;
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .status.error {
+      color: #ff6b81;
+    }
+    .status.ok {
+      color: #36d971;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-on { background: #1c7a3b; color: #dfffe9; }
+    .badge-off { background: #6b2a2f; color: #ffe9ec; }
+  </style>
+
+</head>
+<body>
+  <h1>SVS Booking – Admin Panel</h1>
+
+  <div class="card">
+    <label for="apiBase">API Base URL</label>
+    <input id="apiBase" type="text" value="http://localhost:8000" />
+
+    <label for="adminToken" style="margin-top:10px;">Admin Token</label>
+    <input id="adminToken" type="password" placeholder="ADMIN_TOKEN from server" />
+
+    <div style="margin-top:10px;">
+      <button class="primary" onclick="loadBuffs()">Load buffs</button>
+      <button class="danger" onclick="resetAllBuffs()">Reset ALL bookings</button>
+    </div>
+
+    <div id="globalStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Buffs</h2>
+    <div id="buffContainer">
+      <!-- table injected here -->
+    </div>
+  </div>
+
+  <script>
+    let buffs = [];
+
+    function getApiBase() {
+      return document.getElementById('apiBase').value.trim();
+    }
+
+    function getAdminToken() {
+      return document.getElementById('adminToken').value.trim();
+    }
+
+    function setStatus(msg, type = '') {
+      const el = document.getElementById('globalStatus');
+      el.textContent = msg;
+      el.className = 'status ' + (type || '');
+    }
+
+    function setRowStatus(buffId, msg, type = '') {
+      const el = document.getElementById(`row-status-${buffId}`);
+      if (el) {
+        el.textContent = msg;
+        el.className = 'status ' + (type || '');
+      }
+    }
+
+    async function loadBuffs() {
+      const baseUrl = getApiBase();
+      const token = getAdminToken();
+      if (!baseUrl || !token) {
+        setStatus('Set API base URL and admin token first.', 'error');
+        return;
+      }
+
+      setStatus('Loading buffs...');
+
+      try {
+        const url = `${baseUrl}/admin/buffs?adminToken=${encodeURIComponent(token)}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        if (!Array.isArray(data)) {
+          setStatus('Unexpected response from server.', 'error');
+          console.log('Response:', data);
+          return;
+        }
+
+        // Handle invalid token signature (we used a fake "ERR" item)
+        if (data.length === 1 && data[0].PK === 'ERR') {
+          setStatus('Invalid admin token.', 'error');
+          return;
+        }
+
+        buffs = data;
+        renderBuffTable();
+        setStatus(`Loaded ${buffs.length} buffs.`, 'ok');
+      } catch (err) {
+        console.error(err);
+        setStatus('Error loading buffs: ' + err, 'error');
+      }
+    }
+
+    function renderBuffTable() {
+      const container = document.getElementById('buffContainer');
+      if (!buffs || buffs.length === 0) {
+        container.innerHTML = '<p>No buffs found.</p>';
+        return;
+      }
+
+      let html = '<table><thead><tr>' +
+                 '<th style="width:80px;">Buff ID</th>' +
+                 '<th>Name</th>' +
+                 '<th style="width:160px;">Note</th>' +
+                 '<th style="width:80px;">Enabled</th>' +
+                 '<th style="width:220px;">Actions</th>' +
+                 '</tr></thead><tbody>';
+
+      for (const b of buffs) {
+        const checked = b.Enabled ? 'checked' : '';
+        const badge = b.Enabled
+          ? '<span class="badge badge-on">ON</span>'
+          : '<span class="badge badge-off">OFF</span>';
+        html += `
+          <tr>
+            <td>${b.PK}</td>
+            <td>
+              <input type="text" id="name-${b.PK}" value="${escapeHtml(b.Name)}">
+            </td>
+            <td>
+              <textarea id="note-${b.PK}">${escapeHtml(b.Note || '')}</textarea>
+            </td>
+            <td class="checkbox-cell">
+              <input type="checkbox" id="enabled-${b.PK}" ${checked}>
+              <div>${badge}</div>
+            </td>
+            <td>
+              <button class="primary" onclick="saveBuff('${b.PK}')">Save</button>
+              <button class="secondary" onclick="resetBuff('${b.PK}')">Reset bookings</button>
+              <div id="row-status-${b.PK}" class="status"></div>
+            </td>
+          </tr>
+        `;
+      }
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    async function saveBuff(buffId) {
+      const baseUrl = getApiBase();
+      const token = getAdminToken();
+      const name = document.getElementById(`name-${buffId}`).value;
+      const note = document.getElementById(`note-${buffId}`).value;
+      const enabled = document.getElementById(`enabled-${buffId}`).checked;
+
+      if (!token) {
+        setRowStatus(buffId, 'Set admin token first.', 'error');
+        return;
+      }
+
+      setRowStatus(buffId, 'Saving...', '');
+
+      try {
+        const resp = await fetch(`${baseUrl}/admin/buffs/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: token,
+            buffId,
+            name,
+            note,
+            enabled
+          })
+        });
+        const data = await resp.json();
+
+        if (data === 'OK') {
+          setRowStatus(buffId, 'Saved.', 'ok');
+          // Reload list to update badges etc.
+          await loadBuffs();
+        } else {
+          setRowStatus(buffId, data, 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        setRowStatus(buffId, 'Error: ' + err, 'error');
+      }
+    }
+
+    async function resetBuff(buffId) {
+      const baseUrl = getApiBase();
+      const token = getAdminToken();
+      if (!token) {
+        setRowStatus(buffId, 'Set admin token first.', 'error');
+        return;
+      }
+
+      if (!confirm(`Reset ALL bookings for ${buffId}?`)) return;
+
+      setRowStatus(buffId, 'Resetting...', '');
+
+      try {
+        const resp = await fetch(`${baseUrl}/admin/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: token,
+            buffId: buffId
+          })
+        });
+        const data = await resp.json();
+        setRowStatus(buffId, data, data.startsWith('OK') ? 'ok' : 'error');
+      } catch (err) {
+        console.error(err);
+        setRowStatus(buffId, 'Error: ' + err, 'error');
+      }
+    }
+
+    async function resetAllBuffs() {
+      const baseUrl = getApiBase();
+      const token = getAdminToken();
+      if (!token) {
+        setStatus('Set admin token first.', 'error');
+        return;
+      }
+
+      if (!confirm('RESET ALL BOOKINGS for ALL days?')) return;
+
+      setStatus('Resetting all buffs...', '');
+
+      try {
+        const resp = await fetch(`${baseUrl}/admin/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminToken: token })
+        });
+        const data = await resp.json();
+        setStatus(data, data.startsWith('OK') ? 'ok' : 'error');
+      } catch (err) {
+        console.error(err);
+        setStatus('Error: ' + err, 'error');
+      }
+    }
+
+    // Simple escaping so we don't break attributes when we inject
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
