@@ -129,7 +129,11 @@ class AdminBuffUpdate(BaseModel):
 
 # ---------- CORS ----------
 
-origins = os.getenv("CORS_ORIGINS", "*").split(",")
+origins = [
+    "https://three043-wos-svs.onrender.com",  # your static site
+    "http://localhost:8000",                  # for local testing (optional)
+    "http://127.0.0.1:8000"
+]
 
 app.add_middleware(
     CORSMiddleware,
